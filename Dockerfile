@@ -48,7 +48,7 @@ RUN chown -R app /home/app
 
 USER app
 
-ENV startup_process="./handler" \
+ENV startup_process="/home/app/handler" \
     mode="streaming"
 
 EXPOSE 8080
