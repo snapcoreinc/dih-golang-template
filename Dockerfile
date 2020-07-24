@@ -1,5 +1,5 @@
-FROM openfaas/classic-watchdog:0.18.1 as watchdog
-FROM golang:1.13-alpine3.11 as builder
+FROM registry.gitlab.com/snapcoreinc/snapcore-monitor:latest as kickstart
+FROM golang:1.14-alpine3.12 as builder
 
 # Required to enable Go modules
 RUN apk add --no-cache git
@@ -10,9 +10,6 @@ ARG CGO_ENABLED=0
 ARG GO111MODULE="off"
 ARG GOPROXY=""
 ARG GOFLAGS=""
-
-COPY --from=watchdog /fwatchdog /usr/bin/fwatchdog
-RUN chmod +x /usr/bin/fwatchdog
 
 ENV CGO_ENABLED=0
 
@@ -34,7 +31,7 @@ WORKDIR /go/src/handler
 RUN CGO_ENABLED=${CGO_ENABLED} GOOS=linux \
     go build --ldflags "-s -w" -a -installsuffix cgo -o handler .
 
-FROM alpine:3.11
+FROM alpine:3.12
 RUN apk --no-cache add ca-certificates \
     && addgroup -S app && adduser -S -g app app \
     && mkdir -p /home/app \
@@ -42,17 +39,20 @@ RUN apk --no-cache add ca-certificates \
 
 WORKDIR /home/app
 
-COPY --from=builder /usr/bin/fwatchdog         .
 COPY --from=builder /go/src/handler/module/  .
 COPY --from=builder /go/src/handler/handler    .
+COPY --from=kickstart /dih-monitor /dih-monitor
+RUN chmod +x /dih-monitor
 
 RUN chown -R app /home/app
 
 USER app
 
-ENV fprocess="./handler"
+ENV startup_process="./handler" \
+    mode="streaming"
+
 EXPOSE 8080
 
 HEALTHCHECK --interval=3s CMD [ -e /tmp/.lock ] || exit 1
 
-CMD ["./fwatchdog"]
+CMD ["/dih-monitor"]
