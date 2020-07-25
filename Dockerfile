@@ -35,27 +35,34 @@ WORKDIR /go/src/handler
 RUN CGO_ENABLED=${CGO_ENABLED} GOOS=linux \
     go build --ldflags "-s -w" -a -installsuffix cgo -o handler .
 
+RUN addgroup -S app \
+    && adduser -S -g app app \
+    && apk add --no-cache ca-certificates \
+    && mkdir /scratch-tmp
 
-
-FROM alpine:3.12
-RUN apk --no-cache add ca-certificates \
-    && addgroup -S app && adduser -S -g app app \
-    && mkdir -p /home/app \
-    && chown app /home/app
+FROM scratch
+# RUN apk --no-cache add ca-certificates \
+#     && addgroup -S app && adduser -S -g app app \
+#     && mkdir -p /home/app \
+#     && chown app /home/app
 
 WORKDIR /home/app
 
 COPY --from=builder /tini .
 COPY --from=builder /go/src/handler/handler  .
 COPY --from=kickstart /dih-monitor /dih-monitor
-RUN chmod +x /dih-monitor
+COPY --from=builder /etc/passwd /etc/group /etc/
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder --chown=app:app /scratch-tmp /tmp
 
-RUN chown -R app /home/app
+# RUN chown -R app /home/app
 
 USER app
 
 ENV startup_process="/home/app/handler" \
-    mode="streaming"
+    mode="streaming" \
+    http_proxy="" \
+    https_proxy=""
 
 EXPOSE 8080
 
