@@ -46,7 +46,7 @@ FROM scratch
 #     && mkdir -p /home/app \
 #     && chown app /home/app
 
-WORKDIR /home/app
+WORKDIR /
 
 COPY --from=builder /tini .
 COPY --from=builder /go/src/handler/handler  .
