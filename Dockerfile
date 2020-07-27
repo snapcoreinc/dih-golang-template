@@ -14,21 +14,26 @@ ARG GOFLAGS=""
 ENV CGO_ENABLED=0
 
 WORKDIR /go/src/handler
-COPY . .
+COPY --from=kickstart /gomodmerge .
+
+COPY go.mod ./
+COPY module/go.mod module/
 
 # Add user overrides to the root go.mod, which is the only place "replace" can be used
-COPY --from=kickstart /gomodmerge .
 RUN ./gomodmerge go.mod module/go.mod && cat go.mod.new
-RUN mv go.mod.new go.mod && rm module/go.mod
+RUN cp go.mod.new go.mod && go mod download
+
+COPY . .
 
 # Run a gofmt and exclude all vendored code.
 RUN test -z "$(gofmt -l $(find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./module/vendor/*"))" || { echo "Run \"gofmt -s -w\" on your Golang code"; exit 1; }
 
 WORKDIR /go/src/handler/module
-
 RUN CGO_ENABLED=${CGO_ENABLED} go test ./... -cover
 
 WORKDIR /go/src/handler
+
+RUN mv go.mod.new go.mod && rm module/go.mod
 
 RUN CGO_ENABLED=${CGO_ENABLED} GOOS=linux \
     go build --ldflags "-s -w" -a -installsuffix cgo -o handler .
