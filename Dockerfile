@@ -1,17 +1,13 @@
 FROM registry.gitlab.com/snapcoreinc/snapcore-monitor:latest as kickstart
 FROM golang:1.14-alpine3.12 as builder
 
-ENV TINI_VERSION v0.19.0
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-static /tini
-RUN chmod +x /tini
-
 # Required to enable Go modules
 RUN apk add --no-cache git
 
 # Allows you to add additional packages via build-arg
 ARG ADDITIONAL_PACKAGE
 ARG CGO_ENABLED=0
-ARG GO111MODULE="off"
+ARG GO111MODULE="on"
 ARG GOPROXY=""
 ARG GOFLAGS=""
 
@@ -21,7 +17,9 @@ WORKDIR /go/src/handler
 COPY . .
 
 # Add user overrides to the root go.mod, which is the only place "replace" can be used
-RUN cat module/GO_REPLACE.txt >> ./go.mod || exit 0
+COPY --from=kickstart /gomodmerge .
+RUN ./gomodmerge go.mod module/go.mod && cat go.mod.new
+RUN mv go.mod.new go.mod && rm module/go.mod
 
 # Run a gofmt and exclude all vendored code.
 RUN test -z "$(gofmt -l $(find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./module/vendor/*"))" || { echo "Run \"gofmt -s -w\" on your Golang code"; exit 1; }
@@ -48,18 +46,16 @@ FROM scratch
 
 WORKDIR /
 
-COPY --from=builder /tini .
 COPY --from=builder /go/src/handler/handler  .
-COPY --from=kickstart /dih-monitor /dih-monitor
 COPY --from=builder /etc/passwd /etc/group /etc/
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder --chown=app:app /scratch-tmp /tmp
-
-# RUN chown -R app /home/app
+COPY --from=kickstart /tini .
+COPY --from=kickstart /dih-monitor /dih-monitor
 
 USER app
 
-ENV startup_process="/home/app/handler" \
+ENV startup_process="/handler" \
     mode="streaming" \
     http_proxy="" \
     https_proxy=""
