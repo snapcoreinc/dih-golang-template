@@ -61,7 +61,7 @@ COPY --from=kickstart /dih-monitor /dih-monitor
 USER app
 
 ENV startup_process="/handler" \
-    mode="streaming" \
+    mode="stdio" \
     http_proxy="" \
     https_proxy=""
 
